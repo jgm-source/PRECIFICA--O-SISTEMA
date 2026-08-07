@@ -1,0 +1,32 @@
+# Configuração local do Supabase
+supabase-config.js
+
+# Variáveis de ambiente e credenciais locais
+.env
+.env.*
+!.env.example
+
+# Dependências e saídas de build
+node_modules/
+dist/
+build/
+
+# Logs e arquivos temporários
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+.tmp/
+tmp/
+
+# Configurações locais de editores e sistema
+.vscode/
+.idea/
+.vercel/
+.DS_Store
+Thumbs.db
+
+# Arquivos locais do Supabase CLI
+.supabase/
+supabase/.temp/

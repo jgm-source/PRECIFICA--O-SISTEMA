@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#173c32"/>
+  <rect x="112" y="112" width="288" height="288" rx="74" fill="#e0a744"/>
+  <text x="256" y="300" text-anchor="middle" fill="#173c32" font-family="Arial, sans-serif" font-size="124" font-weight="800">PC</text>
+</svg>

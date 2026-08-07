@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#173c32"/>
+  <rect x="91" y="91" width="330" height="330" rx="86" fill="#e0a744"/>
+  <path d="M145 367c56 23 139 20 207-11" fill="none" stroke="#f1ca7b" stroke-width="15" stroke-linecap="round" opacity=".7"/>
+  <text x="256" y="305" text-anchor="middle" fill="#173c32" font-family="Arial, sans-serif" font-size="143" font-weight="800">PC</text>
+</svg>

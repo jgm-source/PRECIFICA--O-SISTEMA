@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#173c32">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="PreçoCerto">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>PreçoCerto — Gestão de custos</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#" aria-label="PreçoCerto, início">
+      <span class="brand-mark">PC</span>
+      <span><b>PreçoCerto</b><small>Gestão de custos</small></span>
+    </a>
+    <nav aria-label="Navegação principal">
+      <button class="nav-item active" data-view="dashboard"><span>⌂</span> Visão geral</button>
+      <button class="nav-item" data-view="ingredients"><span>◇</span> Insumos</button>
+      <button class="nav-item" data-view="products"><span>▣</span> Produtos</button>
+      <button class="nav-item" data-view="production"><span>↗</span> Produção</button>
+    </nav>
+    <div class="sidebar-note">
+      <span>Seus dados</span>
+      <p>Salvos automaticamente neste navegador.</p>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button class="menu-button" id="menuButton" aria-label="Abrir menu">☰</button>
+      <div><span class="eyebrow" id="pageEyebrow">PAINEL</span><h1 id="pageTitle">Visão geral</h1></div>
+      <div class="account-actions"><span id="userEmail"></span><button class="install-button hidden" id="installButton">Instalar app</button><button class="outline-button" id="exportButton">Exportar dados</button><button class="outline-button" id="logoutButton">Sair</button></div>
+    </header>
+
+    <section class="view active" id="dashboardView">
+      <div class="hero">
+        <div>
+          <span class="eyebrow light">CONTROLE EM SUAS MÃOS</span>
+          <h2>Saiba exatamente quanto custa produzir.</h2>
+          <p>Cadastre seus insumos, monte as fichas técnicas e calcule o custo de cada lote e unidade.</p>
+          <button class="primary-button light-button" data-go="ingredients">Cadastrar primeiro insumo <span>→</span></button>
+        </div>
+        <div class="hero-visual" aria-hidden="true"><div class="coin">R$</div><div class="leaf leaf-one"></div><div class="leaf leaf-two"></div></div>
+      </div>
+      <div class="stats-grid">
+        <article class="stat-card"><div class="stat-icon green">◇</div><div><span>Insumos cadastrados</span><strong id="statIngredients">0</strong><small>itens na sua base</small></div></article>
+        <article class="stat-card"><div class="stat-icon amber">▣</div><div><span>Produtos cadastrados</span><strong id="statProducts">0</strong><small>fichas técnicas</small></div></article>
+        <article class="stat-card"><div class="stat-icon rose">R$</div><div><span>Custo da produção</span><strong id="statProduction">R$ 0,00</strong><small>último planejamento</small></div></article>
+      </div>
+      <div class="content-grid">
+        <article class="panel getting-started">
+          <div class="panel-heading"><div><span class="eyebrow">COMECE POR AQUI</span><h3>Seu fluxo de precificação</h3></div></div>
+          <button class="step" data-go="ingredients"><b>1</b><span><strong>Cadastre os insumos</strong><small>Informe o valor, peso, volume ou quantidade da embalagem.</small></span><i>→</i></button>
+          <button class="step" data-go="products"><b>2</b><span><strong>Monte seus produtos</strong><small>Adicione cada ingrediente e a quantidade usada na receita.</small></span><i>→</i></button>
+          <button class="step" data-go="production"><b>3</b><span><strong>Planeje a produção</strong><small>Calcule vários produtos e veja o custo unitário.</small></span><i>→</i></button>
+        </article>
+        <article class="panel summary-panel">
+          <div class="panel-heading"><div><span class="eyebrow">RESUMO</span><h3>Produtos mais recentes</h3></div><button class="text-button" data-go="products">Ver todos</button></div>
+          <div id="recentProducts" class="empty compact"><span>▣</span><p>Nenhum produto cadastrado ainda.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" id="ingredientsView">
+      <div class="section-intro"><div><p>Registre tudo o que você compra para fabricar seus produtos.</p></div><button class="primary-button" id="newIngredientButton">+ Novo insumo</button></div>
+      <div class="toolbar"><label class="search">⌕ <input id="ingredientSearch" type="search" placeholder="Buscar insumo..."></label><span id="ingredientCount">0 insumos</span></div>
+      <div class="data-card"><div class="table-wrap"><table><thead><tr><th>Insumo</th><th>Embalagem comprada</th><th>Preço pago</th><th>Custo base</th><th></th></tr></thead><tbody id="ingredientTableBody"></tbody></table></div><div class="empty" id="ingredientEmpty"><span>◇</span><h3>Sua despensa ainda está vazia</h3><p>Cadastre leite, orégano, embalagens e todos os itens usados na fabricação.</p><button class="primary-button" data-action="new-ingredient">Cadastrar insumo</button></div></div>
+    </section>
+
+    <section class="view" id="productsView">
+      <div class="section-intro"><div><p>Crie fichas técnicas e descubra o custo exato de cada receita.</p></div><button class="primary-button" id="newProductButton">+ Novo produto</button></div>
+      <div class="toolbar"><label class="search">⌕ <input id="productSearch" type="search" placeholder="Buscar produto..."></label><span id="productCount">0 produtos</span></div>
+      <div id="productGrid" class="product-grid"></div>
+      <div class="data-card empty" id="productEmpty"><span>▣</span><h3>Nenhuma ficha técnica criada</h3><p>Monte seu primeiro produto selecionando os insumos e as quantidades usadas.</p><button class="primary-button" data-action="new-product">Criar produto</button></div>
+    </section>
+
+    <section class="view" id="productionView">
+      <div class="section-intro"><div><p>Simule uma produção com vários produtos e veja o investimento total.</p></div><button class="primary-button" id="addProductionButton">+ Adicionar produto</button></div>
+      <div class="production-layout">
+        <article class="panel">
+          <div class="panel-heading"><div><span class="eyebrow">PLANEJAMENTO</span><h3>Itens da produção</h3></div></div>
+          <div id="productionRows"></div>
+          <div class="empty compact" id="productionEmpty"><span>↗</span><p>Adicione os produtos que serão feitos neste lote.</p></div>
+        </article>
+        <aside class="total-card">
+          <span class="eyebrow light">INVESTIMENTO DO LOTE</span><strong id="productionTotal">R$ 0,00</strong><p id="productionUnits">0 unidades produzidas</p>
+          <div class="total-divider"></div>
+          <div class="total-line"><span>Produtos diferentes</span><b id="productionKinds">0</b></div>
+          <div class="total-line"><span>Custo médio/unidade</span><b id="productionAverage">R$ 0,00</b></div>
+          <button class="light-button primary-button full" id="printButton">Imprimir resumo</button>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="ingredientDialog">
+    <form method="dialog" id="ingredientForm">
+      <div class="modal-header"><div><span class="eyebrow">INSUMO</span><h2 id="ingredientModalTitle">Novo insumo</h2></div><button class="icon-button" type="button" data-close-dialog aria-label="Fechar">×</button></div>
+      <input type="hidden" id="ingredientId">
+      <label>Nome do insumo<input id="ingredientName" required maxlength="80" placeholder="Ex.: Leite integral"></label>
+      <div class="form-grid">
+        <label>Preço pago (R$)<input id="ingredientPrice" type="number" required min="0.01" step="0.01" placeholder="10,00"></label>
+        <label>Tipo de medida<select id="ingredientUnit" required><option value="g">Peso (gramas)</option><option value="ml">Volume (mililitros)</option><option value="un">Quantidade (unidades)</option></select></label>
+      </div>
+      <label>Quantidade na embalagem<input id="ingredientAmount" type="number" required min="0.001" step="0.001" placeholder="Ex.: 1000"><small id="amountHelp">Informe quantos gramas há no pacote comprado.</small></label>
+      <div class="cost-preview"><span>Custo por <b id="previewUnit">grama</b></span><strong id="ingredientPreview">R$ 0,0000</strong></div>
+      <div class="modal-actions"><button class="outline-button" type="button" data-close-dialog>Cancelar</button><button class="primary-button" value="default" type="submit">Salvar insumo</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="productDialog" class="wide-dialog">
+    <form method="dialog" id="productForm">
+      <div class="modal-header"><div><span class="eyebrow">FICHA TÉCNICA</span><h2 id="productModalTitle">Novo produto</h2></div><button class="icon-button" type="button" data-close-dialog aria-label="Fechar">×</button></div>
+      <input type="hidden" id="productId">
+      <div class="form-grid"><label>Nome do produto<input id="productName" required maxlength="80" placeholder="Ex.: Bolo de cenoura"></label><label>Rendimento da receita<input id="productYield" type="number" required min="1" step="1" placeholder="Ex.: 12"><small>Quantidade de unidades produzidas.</small></label></div>
+      <div class="recipe-heading"><div><h3>Ingredientes usados</h3><p>O custo é calculado proporcionalmente à quantidade utilizada.</p></div><button class="outline-button" type="button" id="addRecipeItemButton">+ Adicionar insumo</button></div>
+      <div id="recipeRows"></div>
+      <div class="empty compact" id="recipeEmpty"><p>Adicione pelo menos um insumo à receita.</p></div>
+      <div class="recipe-total"><span>Custo estimado da receita</span><div><strong id="recipeTotal">R$ 0,00</strong><small id="recipeUnitCost">R$ 0,00 por unidade</small></div></div>
+      <div class="modal-actions"><button class="outline-button" type="button" data-close-dialog>Cancelar</button><button class="primary-button" value="default" type="submit">Salvar produto</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="productionDialog" class="small-dialog">
+    <form method="dialog" id="productionForm">
+      <div class="modal-header"><div><span class="eyebrow">PRODUÇÃO</span><h2>Adicionar produto</h2></div><button class="icon-button" type="button" data-close-dialog aria-label="Fechar">×</button></div>
+      <label>Produto<select id="productionProduct" required></select></label>
+      <label>Quantidade a produzir<input id="productionQuantity" type="number" min="1" step="1" value="1" required><small>Informe o total de unidades desejadas.</small></label>
+      <div class="cost-preview"><span>Custo estimado</span><strong id="productionPreview">R$ 0,00</strong></div>
+      <div class="modal-actions"><button class="outline-button" type="button" data-close-dialog>Cancelar</button><button class="primary-button" value="default" type="submit">Adicionar</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <section class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="auth-brand"><span class="brand-mark">PC</span><div><b>PreçoCerto</b><small>Gestão de custos</small></div></div>
+      <div id="authConfigured">
+        <span class="eyebrow">BEM-VINDO</span><h2 id="authTitle">Entre na sua conta</h2><p id="authDescription">Acesse seus insumos e produtos de qualquer dispositivo.</p>
+        <form id="authForm">
+          <label>E-mail<input id="authEmail" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
+          <label>Senha<input id="authPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="Mínimo de 6 caracteres"></label>
+          <button class="primary-button full auth-submit" id="authSubmit" type="submit">Entrar</button>
+        </form>
+        <div class="auth-message hidden" id="authMessage" role="alert"></div>
+        <button class="text-button auth-toggle" id="authToggle" type="button">Ainda não tenho uma conta</button>
+      </div>
+      <div id="authNotConfigured" class="hidden setup-message"><span class="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span><h2>Conecte seu Supabase</h2><p>Preencha a URL e a chave pública em <code>supabase-config.js</code> e atualize esta página.</p></div>
+    </div>
+  </section>
+  <div class="sync-status" id="syncStatus">Sincronizado</div>
+  <div class="network-banner hidden" id="networkBanner">Sem internet — suas alterações ficarão pendentes.</div>
+  <div class="update-banner hidden" id="updateBanner"><span>Uma nova versão está disponível.</span><button id="updateButton">Atualizar agora</button></div>
+  <script src="app.js?v=10"></script>
+</body>
+</html>
