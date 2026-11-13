@@ -1,13 +1,13 @@
 const LEGACY_STORAGE_KEY = 'precocerto-v1';
 const CACHE_PREFIX = 'precocerto-cache-v2-';
 const PENDING_PREFIX = 'precocerto-pending-v2-';
+const LAST_USER_KEY = 'precocerto-last-user';
 const unitNames = { g: ['grama', 'gramas'], ml: ['mililitro', 'mililitros'], un: ['unidade', 'unidades'] };
 const state = { ingredients: [], products: [], production: [] };
 let activeView = 'dashboard';
 let recipeDraft = [];
-let supabaseClient = null;
 let currentUser = null;
-let authMode = 'login';
+let setPasswordToken = '';
 let saveTimer = null;
 let saveQueue = Promise.resolve();
 let installPrompt = null;
@@ -17,7 +17,14 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const money = value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
 const number = value => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(Number(value) || 0);
-const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+function uid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char]));
 
 function loadLegacyState() {
@@ -28,19 +35,33 @@ function loadLegacyState() {
 }
 function saveState(message) {
   if (currentUser) localStorage.setItem(`${CACHE_PREFIX}${currentUser.id}`, JSON.stringify(state));
-  renderAll(); if (message) toast(message);
-  if (!supabaseClient || !currentUser) return;
-  clearTimeout(saveTimer); setSyncStatus('Salvando...');
+  renderAll();
+  if (message) toast(message);
+  if (!currentUser) return;
+  clearTimeout(saveTimer);
+  setSyncStatus('Salvando...');
   saveTimer = setTimeout(() => persistState(JSON.parse(JSON.stringify(state))), 350);
 }
 function persistState(snapshot) {
   const saveUserId = currentUser?.id;
   if (!saveUserId) return Promise.resolve();
-  saveQueue = saveQueue.then(async()=>{
-    const { error } = await supabaseClient.rpc('save_price_state', { state: snapshot });
-    if (error) { localStorage.setItem(`${PENDING_PREFIX}${saveUserId}`,JSON.stringify(snapshot));console.error('Falha ao sincronizar:',error.code);setSyncStatus(navigator.onLine?'Erro ao sincronizar':'Aguardando conexão',true);if(navigator.onLine)toast('Não foi possível salvar no Supabase. Confira se o novo SQL foi executado.'); }
-    else { localStorage.removeItem(`${PENDING_PREFIX}${saveUserId}`);setSyncStatus('Sincronizado'); }
-  });
+  saveQueue = saveQueue.then(async () => {
+    try {
+      await api('/api/state', { method: 'PUT', body: JSON.stringify(snapshot) });
+      localStorage.removeItem(`${PENDING_PREFIX}${saveUserId}`);
+      setSyncStatus('Sincronizado');
+    } catch (error) {
+      localStorage.setItem(`${PENDING_PREFIX}${saveUserId}`, JSON.stringify(snapshot));
+      console.error('Falha ao sincronizar:', error.status || error.message);
+      if (error.status === 401) {
+        toast('Sua sessão expirou. Entre novamente.');
+        leaveApplication();
+        return;
+      }
+      setSyncStatus(navigator.onLine ? 'Erro ao sincronizar' : 'Aguardando conexão', true);
+      if (navigator.onLine) toast(error.message || 'Não foi possível salvar no servidor.');
+    }
+  }).catch(error => console.error(error));
   return saveQueue;
 }
 function ingredientCost(id, amount) { const item = state.ingredients.find(i => i.id === id); return item ? (item.price / item.amount) * amount : 0; }
@@ -49,75 +70,141 @@ function unitCost(product) { return productCost(product) / product.yield; }
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 2600); }
 function setSyncStatus(message, error = false) { const el=$('#syncStatus'); el.textContent=message; el.classList.toggle('error',error); el.classList.add('show'); clearTimeout(setSyncStatus.timer); setSyncStatus.timer=setTimeout(()=>el.classList.remove('show'),error?5000:1800); }
 
-async function initializeSupabase() {
+async function api(path, options = {}) {
+  let response;
   try {
-    const response = await fetch('/api/config', { cache:'no-store' });
-    if (response.ok) { const config=await response.json();if(config.url&&config.publishableKey)window.SUPABASE_CONFIG=config; }
-  } catch {}
-  if (!window.SUPABASE_CONFIG) {
-    try {
-      const source = await fetch(`supabase-config.js?fresh=${Date.now()}`, { cache:'no-store' }).then(response=>response.text());
-      const url = source.match(/url\s*:\s*['"]([^'"]+)['"]/i)?.[1];
-      const publishableKey = source.match(/publishableKey\s*:\s*['"]([^'"]+)['"]/i)?.[1];
-      if (url && publishableKey) window.SUPABASE_CONFIG = { url, publishableKey };
-    } catch {}
+    response = await fetch(path, {
+      method: options.method || 'GET',
+      credentials: 'same-origin',
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+      body: options.body
+    });
+  } catch {
+    const failure = new Error('Sem conexão com o servidor.');
+    failure.status = 0;
+    throw failure;
   }
-  let supabaseApi = window.supabase;
-  if (!window.supabase) {
-    try { supabaseApi = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'); } catch {}
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const failure = new Error(data.error || 'Não foi possível concluir a operação.');
+    failure.status = response.status;
+    throw failure;
   }
-  const config = window.SUPABASE_CONFIG || {};
-  const normalizedUrl = String(config.url || '').trim().replace(/\/+$/, '');
-  const configured = /^https:\/\/.+\.supabase\.co$/.test(normalizedUrl) && config.publishableKey && !config.publishableKey.includes('COLE_');
-  $('#authConfigured').classList.toggle('hidden', !configured); $('#authNotConfigured').classList.toggle('hidden', configured);
-  if (!configured) return;
-  if (!supabaseApi) { $('#authConfigured').classList.add('hidden'); $('#authNotConfigured').classList.remove('hidden'); $('#authNotConfigured').innerHTML='<span class="eyebrow">ERRO DE CONEXÃO</span><h2>Não foi possível carregar o Supabase</h2><p>Verifique sua conexão com a internet e atualize a página.</p>'; return; }
-  supabaseClient = supabaseApi.createClient(normalizedUrl, config.publishableKey.trim(), { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
-  const { data } = await supabaseClient.auth.getSession();
-  if (data.session) await enterApplication(data.session.user);
-  supabaseClient.auth.onAuthStateChange((event, session) => setTimeout(async()=>{
-    if (session?.user && session.user.id !== currentUser?.id) await enterApplication(session.user);
-    if (!session) leaveApplication();
-  },0));
+  return data;
+}
+function showAccount(user) {
+  const account = $('#userEmail');
+  account.textContent = user.name || user.email || '';
+  account.title = user.email || '';
+}
+function readLastUser() {
+  try {
+    const user = JSON.parse(localStorage.getItem(LAST_USER_KEY));
+    return user?.id ? user : null;
+  } catch { return null; }
+}
+function rememberUser(user) {
+  localStorage.setItem(LAST_USER_KEY, JSON.stringify({ id: user.id, email: user.email, name: user.name, role: user.role }));
+}
+async function initializeAuth() {
+  if (location.pathname === '/definir-senha') {
+    await openSetPassword();
+    return;
+  }
+  try {
+    const data = await api('/api/session');
+    if (data.user) await enterApplication(data.user);
+  } catch (error) {
+    const last = readLastUser();
+    if (last && (error.status === 0 || error.status === 503 || !navigator.onLine)) {
+      enterOffline(last);
+      toast(error.message || 'Sem conexão. Mostrando a cópia deste navegador.');
+      return;
+    }
+    if (error.message) showAuthMessage(error.message);
+  }
+}
+function enterOffline(user) {
+  currentUser = user;
+  showAccount(user);
+  $('#authScreen').classList.add('authenticated');
+  Object.assign(state, readUserCache(user.id));
+  const pending = readPendingState(user.id);
+  if (pending) Object.assign(state, pending);
+  renderAll();
+  setSyncStatus('Modo offline', true);
 }
 async function enterApplication(user) {
-  currentUser=user; $('#userEmail').textContent=user.email || ''; $('#authScreen').classList.add('authenticated'); setSyncStatus('Carregando dados...');
-  const remote = await loadRemoteState(user.id);
-  if (remote.error) {
-    const cached = readUserCache(user.id); Object.assign(state,cached);
-    renderAll(); setSyncStatus('Erro ao carregar dados',true); toast('Execute o novo arquivo supabase-setup.sql para liberar o banco relacional.'); return;
+  currentUser = user;
+  rememberUser(user);
+  showAccount(user);
+  $('#authScreen').classList.add('authenticated');
+  setSyncStatus('Carregando dados...');
+  let remote;
+  try {
+    remote = await loadRemoteState();
+  } catch (error) {
+    if (error.status === 401) {
+      leaveApplication();
+      showAuthMessage(error.message);
+      return;
+    }
+    Object.assign(state, readUserCache(user.id));
+    renderAll();
+    setSyncStatus('Erro ao carregar dados', true);
+    toast(error.message || 'Não foi possível carregar os dados.');
+    return;
   }
-  Object.assign(state,remote.state);
+  Object.assign(state, remote);
   const pending = readPendingState(user.id);
-  if (pending) { Object.assign(state,pending);await persistState(JSON.parse(JSON.stringify(state)));toast('Alterações pendentes foram sincronizadas.'); }
+  if (pending) {
+    Object.assign(state, pending);
+    await persistState(JSON.parse(JSON.stringify(state)));
+    if (!currentUser) return;
+    if (!readPendingState(user.id)) toast('Alterações pendentes foram sincronizadas.');
+  }
   const hasRemoteData = state.ingredients.length || state.products.length || state.production.length;
   const legacy = loadLegacyState();
   const hasLegacyData = legacy.ingredients.length || legacy.products.length || legacy.production.length;
   const migrationOwner = localStorage.getItem('precocerto-legacy-migrated-user');
   if (!hasRemoteData && hasLegacyData && !migrationOwner) {
-    Object.assign(state,legacy); await persistState(JSON.parse(JSON.stringify(state)));
-    localStorage.setItem('precocerto-legacy-migrated-user',user.id); localStorage.removeItem(LEGACY_STORAGE_KEY);
-    toast('Dados anteriores migrados para sua conta no Supabase.');
+    Object.assign(state, legacy);
+    await persistState(JSON.parse(JSON.stringify(state)));
+    if (!currentUser) return;
+    localStorage.setItem('precocerto-legacy-migrated-user', user.id);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    toast('Dados anteriores deste navegador foram copiados para a sua conta.');
   }
-  localStorage.setItem(`${CACHE_PREFIX}${user.id}`,JSON.stringify(state)); renderAll(); setSyncStatus('Sincronizado');
+  localStorage.setItem(`${CACHE_PREFIX}${user.id}`, JSON.stringify(state));
+  renderAll();
+  setSyncStatus('Sincronizado');
 }
-async function loadRemoteState(userId) {
-  const [ingredientsResult,productsResult,recipeResult,productionResult] = await Promise.all([
-    supabaseClient.from('ingredients').select('id,name,price,unit,amount,created_at').eq('user_id',userId).order('created_at'),
-    supabaseClient.from('products').select('id,name,yield,created_at').eq('user_id',userId).order('created_at'),
-    supabaseClient.from('product_ingredients').select('product_id,ingredient_id,amount,position').eq('user_id',userId).order('position'),
-    supabaseClient.from('production_items').select('id,product_id,quantity,position').eq('user_id',userId).order('position')
-  ]);
-  const error = ingredientsResult.error || productsResult.error || recipeResult.error || productionResult.error;
-  if (error) return { error };
-  const ingredients=(ingredientsResult.data||[]).map(i=>({id:i.id,name:i.name,price:Number(i.price),unit:i.unit,amount:Number(i.amount)}));
-  const products=(productsResult.data||[]).map(p=>({id:p.id,name:p.name,yield:Number(p.yield),items:(recipeResult.data||[]).filter(i=>i.product_id===p.id).map(i=>({ingredientId:i.ingredient_id,amount:Number(i.amount)}))}));
-  const production=(productionResult.data||[]).map(i=>({id:i.id,productId:i.product_id,quantity:Number(i.quantity)}));
-  return { state:{ingredients,products,production} };
+async function loadRemoteState() {
+  return api('/api/state');
 }
 function readUserCache(userId){try{const saved=JSON.parse(localStorage.getItem(`${CACHE_PREFIX}${userId}`));return{ingredients:saved?.ingredients||[],products:saved?.products||[],production:saved?.production||[]}}catch{return{ingredients:[],products:[],production:[]}}}
 function readPendingState(userId){try{return JSON.parse(localStorage.getItem(`${PENDING_PREFIX}${userId}`))||null}catch{return null}}
-function leaveApplication(){currentUser=null;state.ingredients=[];state.products=[];state.production=[];renderAll();$('#authScreen').classList.remove('authenticated');$('#userEmail').textContent='';}
+function showLoginPanel() {
+  document.documentElement.classList.remove('set-password');
+  $('#loginPanel').classList.remove('hidden');
+  $('#forgotPanel').classList.add('hidden');
+  $('#setPasswordPanel').classList.add('hidden');
+  $('#setPasswordForm').classList.remove('hidden');
+  showAuthMessage('');
+}
+function leaveApplication() {
+  currentUser = null;
+  localStorage.removeItem(LAST_USER_KEY);
+  state.ingredients = [];
+  state.products = [];
+  state.production = [];
+  renderAll();
+  showLoginPanel();
+  $('#authScreen').classList.remove('authenticated');
+  $('#userEmail').textContent = '';
+  $('#userEmail').title = '';
+  if (location.pathname === '/definir-senha') history.replaceState({}, '', '/');
+}
 
 function showView(view) {
   activeView = view;
@@ -199,11 +286,94 @@ $('#productionProduct').addEventListener('change',updateProductionPreview);$('#p
 $('#productionForm').addEventListener('submit',e=>{e.preventDefault();const productId=$('#productionProduct').value,quantity=Number($('#productionQuantity').value);if(quantity<1)return;const existing=state.production.find(r=>r.productId===productId);existing?existing.quantity+=quantity:state.production.push({id:uid(),productId,quantity});$('#productionDialog').close();saveState('Produto adicionado à produção.');});
 $('#productionRows').addEventListener('change',e=>{if(e.target.dataset.productionQuantity){const row=state.production.find(r=>r.id===e.target.dataset.productionQuantity);row.quantity=Math.max(1,Number(e.target.value)||1);saveState();}});
 $('#printButton').addEventListener('click',()=>window.print());
-$('#authToggle').addEventListener('click',()=>{authMode=authMode==='login'?'signup':'login';const signup=authMode==='signup';$('#authTitle').textContent=signup?'Crie sua conta':'Entre na sua conta';$('#authDescription').textContent=signup?'Seus dados ficarão seguros e disponíveis em seus dispositivos.':'Acesse seus insumos e produtos de qualquer dispositivo.';$('#authSubmit').disabled=false;$('#authSubmit').textContent=signup?'Criar conta':'Entrar';$('#authToggle').textContent=signup?'Já tenho uma conta':'Ainda não tenho uma conta';$('#authPassword').autocomplete=signup?'new-password':'current-password';showAuthMessage('');});
-function showAuthMessage(message,success=false){const el=$('#authMessage');el.textContent=message;el.classList.toggle('hidden',!message);el.classList.toggle('success',success)}
-function authErrorMessage(error){const messages={invalid_credentials:'E-mail ou senha incorretos.',email_not_confirmed:'Confirme seu e-mail antes de entrar.',user_already_exists:'Este e-mail já possui uma conta. Clique em “Já tenho uma conta” para entrar.',signup_disabled:'A criação de contas está desativada no Supabase.',over_email_send_rate_limit:'O e-mail atingiu o limite de envios, mas sua conta pode já ter sido criada. Clique em “Já tenho uma conta” e tente entrar.'};return messages[error?.code]||error?.message||'Não foi possível conectar ao Supabase.'}
-$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const button=$('#authSubmit'),email=$('#authEmail').value.trim(),password=$('#authPassword').value,signup=authMode==='signup';let keepDisabled=false;showAuthMessage('');button.disabled=true;button.textContent=signup?'Criando conta...':'Entrando...';try{const result=signup?await supabaseClient.auth.signUp({email,password}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){showAuthMessage(authErrorMessage(result.error));return}if(signup&&!result.data.session){keepDisabled=true;button.textContent='E-mail de confirmação enviado';showAuthMessage('Conta criada! Enviamos um e-mail de confirmação. Abra sua caixa de entrada e clique no link para liberar o acesso.',true)}else if(signup){keepDisabled=true;button.textContent='Conta criada';showAuthMessage('Conta criada com sucesso. Entrando...',true)}}catch(error){showAuthMessage(authErrorMessage(error))}finally{button.disabled=keepDisabled;if(!keepDisabled)button.textContent=signup?'Criar conta':'Entrar'}});
-$('#logoutButton').addEventListener('click',async()=>{if(supabaseClient)await supabaseClient.auth.signOut();leaveApplication();});
+function showAuthMessage(message, success = false) {
+  const el = $('#authMessage');
+  el.textContent = message;
+  el.classList.toggle('hidden', !message);
+  el.classList.toggle('success', success);
+}
+function showSetMessage(message, success = false) {
+  const el = $('#setPasswordMessage');
+  el.textContent = message;
+  el.classList.toggle('hidden', !message);
+  el.classList.toggle('success', success);
+}
+$('#forgotButton').addEventListener('click', () => {
+  $('#loginPanel').classList.add('hidden');
+  $('#forgotPanel').classList.remove('hidden');
+  showAuthMessage('');
+});
+$('#backToLogin').addEventListener('click', () => {
+  $('#forgotPanel').classList.add('hidden');
+  $('#loginPanel').classList.remove('hidden');
+});
+$('#authForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('#authSubmit');
+  showAuthMessage('');
+  button.disabled = true;
+  button.textContent = 'Entrando...';
+  try {
+    const data = await api('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: $('#authEmail').value.trim(), password: $('#authPassword').value })
+    });
+    await enterApplication(data.user);
+  } catch (error) {
+    showAuthMessage(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Entrar';
+  }
+});
+async function openSetPassword() {
+  $('#loginPanel').classList.add('hidden');
+  $('#forgotPanel').classList.add('hidden');
+  $('#setPasswordPanel').classList.remove('hidden');
+  setPasswordToken = new URLSearchParams(location.search).get('token') || '';
+  if (!setPasswordToken) {
+    showSetMessage('Este link está incompleto. Peça um novo link de definição de senha.');
+    $('#setPasswordForm').classList.add('hidden');
+    return;
+  }
+  try {
+    const data = await api(`/api/password-token?token=${encodeURIComponent(setPasswordToken)}`);
+    const intro = data.purpose === 'reset'
+      ? 'Escolha uma nova senha. A senha anterior deixa de valer.'
+      : 'Crie a senha para entrar no PreçoCerto.';
+    $('#setPasswordIntro').textContent = `${intro} Conta de ${data.name}: ${data.email}.`;
+  } catch (error) {
+    showSetMessage(error.message || 'Este link é inválido ou expirou.');
+    $('#setPasswordForm').classList.add('hidden');
+  }
+}
+$('#setPasswordForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const password = $('#newPassword').value;
+  const confirmation = $('#confirmPassword').value;
+  if (password !== confirmation) {
+    showSetMessage('As senhas não conferem.');
+    return;
+  }
+  const button = $('#setPasswordSubmit');
+  button.disabled = true;
+  button.textContent = 'Salvando...';
+  showSetMessage('');
+  try {
+    const data = await api('/api/password', { method: 'POST', body: JSON.stringify({ token: setPasswordToken, password }) });
+    history.replaceState({}, '', '/');
+    showSetMessage('Senha definida. Entrando...', true);
+    await enterApplication(data.user);
+  } catch (error) {
+    showSetMessage(error.message);
+    button.disabled = false;
+    button.textContent = 'Salvar senha e entrar';
+  }
+});
+$('#logoutButton').addEventListener('click', async () => {
+  try { await api('/api/logout', { method: 'POST', body: '{}' }); } catch { /* a tela de login aparece mesmo sem resposta */ }
+  leaveApplication();
+});
 $('#exportButton').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`precocerto-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);toast('Backup exportado.');});
 
 function updateNetworkStatus(){const offline=!navigator.onLine;$('#networkBanner').classList.toggle('hidden',!offline);if(offline)setSyncStatus('Modo offline',true)}
@@ -226,4 +396,4 @@ async function initializePwa(){
 
 const requestedView=new URLSearchParams(location.search).get('view');
 if(['ingredients','products','production'].includes(requestedView))showView(requestedView);
-renderAll();updateNetworkStatus();initializePwa();initializeSupabase();
+renderAll();updateNetworkStatus();initializePwa();initializeAuth();

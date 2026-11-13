@@ -1,8 +1,8 @@
-const VERSION = 'precocerto-v1';
+const VERSION = 'precocerto-v2';
 const STATIC_CACHE = `${VERSION}-static`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_SHELL = [
-  '/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/offline.html',
+  '/', '/index.html', '/styles.css', '/boot.js', '/app.js', '/manifest.webmanifest', '/offline.html',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-192.png', '/icons/icon-maskable-512.png'
 ];
 
@@ -20,7 +20,7 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.pathname === '/api/config' || url.hostname.endsWith('.supabase.co')) return;
+  if (url.pathname.startsWith('/api/') || url.pathname === '/service-worker.js') return;
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).then(response => { const copy=response.clone();caches.open(RUNTIME_CACHE).then(cache=>cache.put('/index.html',copy));return response; }).catch(async()=>await caches.match('/index.html')||await caches.match('/offline.html')));

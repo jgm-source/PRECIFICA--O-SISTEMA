@@ -15,7 +15,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/boot.js"></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -30,8 +31,8 @@
       <button class="nav-item" data-view="production"><span>↗</span> Produção</button>
     </nav>
     <div class="sidebar-note">
-      <span>Seus dados</span>
-      <p>Salvos automaticamente neste navegador.</p>
+      <span>Sua conta</span>
+      <p>Os dados ficam salvos na sua conta. Este navegador guarda uma cópia para uso sem internet.</p>
     </div>
   </aside>
 
@@ -145,22 +146,39 @@
   <section class="auth-screen" id="authScreen">
     <div class="auth-card">
       <div class="auth-brand"><span class="brand-mark">PC</span><div><b>PreçoCerto</b><small>Gestão de custos</small></div></div>
-      <div id="authConfigured">
-        <span class="eyebrow">BEM-VINDO</span><h2 id="authTitle">Entre na sua conta</h2><p id="authDescription">Acesse seus insumos e produtos de qualquer dispositivo.</p>
+      <div id="loginPanel">
+        <span class="eyebrow">BEM-VINDO</span><h2 id="authTitle">Entre na sua conta</h2><p id="authDescription">Acesse seus insumos, fichas técnicas e produções.</p>
         <form id="authForm">
-          <label>E-mail<input id="authEmail" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
-          <label>Senha<input id="authPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="Mínimo de 6 caracteres"></label>
+          <label>E-mail<input id="authEmail" type="email" autocomplete="username" required placeholder="voce@exemplo.com"></label>
+          <label>Senha<input id="authPassword" type="password" autocomplete="current-password" required minlength="8" placeholder="Mínimo de 8 caracteres"></label>
           <button class="primary-button full auth-submit" id="authSubmit" type="submit">Entrar</button>
         </form>
         <div class="auth-message hidden" id="authMessage" role="alert"></div>
-        <button class="text-button auth-toggle" id="authToggle" type="button">Ainda não tenho uma conta</button>
+        <button class="text-button auth-toggle" id="forgotButton" type="button">Esqueci minha senha</button>
       </div>
-      <div id="authNotConfigured" class="hidden setup-message"><span class="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span><h2>Conecte seu Supabase</h2><p>Preencha a URL e a chave pública em <code>supabase-config.js</code> e atualize esta página.</p></div>
+      <div id="forgotPanel" class="hidden">
+        <span class="eyebrow">SENHA</span>
+        <h2>Esqueci minha senha</h2>
+        <p>A nova senha usa o mesmo link da primeira vez: um endereço único, com prazo para expirar. O PreçoCerto não envia e-mail. Peça um novo link a quem administra o sistema.</p>
+        <button class="primary-button full" id="backToLogin" type="button">Voltar ao login</button>
+      </div>
+      <div id="setPasswordPanel" class="hidden">
+        <span class="eyebrow">SUA CONTA</span>
+        <h2>Defina sua senha</h2>
+        <p id="setPasswordIntro">Abra o link recebido e escolha uma senha para a sua conta.</p>
+        <form id="setPasswordForm">
+          <label>Nova senha<input id="newPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="200" placeholder="Mínimo de 8 caracteres"></label>
+          <label>Confirmar senha<input id="confirmPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="200" placeholder="Repita a senha"></label>
+          <button class="primary-button full auth-submit" id="setPasswordSubmit" type="submit">Salvar senha e entrar</button>
+        </form>
+        <div class="auth-message hidden" id="setPasswordMessage" role="alert"></div>
+        <a class="auth-back" href="/">Ir para o login</a>
+      </div>
     </div>
   </section>
   <div class="sync-status" id="syncStatus">Sincronizado</div>
   <div class="network-banner hidden" id="networkBanner">Sem internet — suas alterações ficarão pendentes.</div>
   <div class="update-banner hidden" id="updateBanner"><span>Uma nova versão está disponível.</span><button id="updateButton">Atualizar agora</button></div>
-  <script src="app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

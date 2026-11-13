@@ -1,4 +1,4 @@
-# Configuração local do Supabase
+# Configuração antiga do Supabase, se ainda existir na máquina
 supabase-config.js
 
 # Variáveis de ambiente e credenciais locais
